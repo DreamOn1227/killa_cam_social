@@ -1,0 +1,29 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:killa_cam_social/pages/home.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding();
+  await Firebase.initializeApp();
+  runApp(
+    const MyApp(),
+  );
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      theme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+      ),
+      title: 'KillaCamSocial',
+      debugShowCheckedModeBanner: false,
+      home: const Home(),
+    );
+  }
+}
