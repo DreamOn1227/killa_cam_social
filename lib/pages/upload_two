@@ -1,0 +1,328 @@
+class UploadPage extends StatefulWidget {
+  const UploadPage({
+    Key? key,
+    this.currentUser,
+  }) : super(key: key);
+
+  final AppUser? currentUser;
+
+  @override
+  _UploadPageState createState() => _UploadPageState();
+}
+
+class _UploadPageState extends State<UploadPage>
+    with AutomaticKeepAliveClientMixin<UploadPage> {
+  TextEditingController locationController = TextEditingController();
+  TextEditingController captionController = TextEditingController();
+  File? file;
+  bool isUploading = false;
+  String postId = const Uuid().v4();
+
+  void handleTakePhoto() async {
+    Navigator.pop(context);
+    File? file = await ImagePicker().pickImage(
+      imageQuality: 85,
+      source: ImageSource.camera,
+      maxHeight: 675,
+      maxWidth: 960,
+    );
+    setState(
+      () {
+        this.file = file as File;
+      },
+    );
+  }
+
+  void handleChooseFromGallery() async {
+    Navigator.pop(context);
+    XFile? file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+    setState(
+      () {
+        this.file = file as File;
+      },
+    );
+  }
+
+  Future<dynamic> selectImage(parentContext) {
+    return showDialog(
+        context: parentContext,
+        builder: (context) {
+          return SimpleDialog(
+            title: const Text('Create Post'),
+            children: [
+              SimpleDialogOption(
+                onPressed: handleTakePhoto,
+                child: const Text('Photo with Camera'),
+              ),
+              SimpleDialogOption(
+                onPressed: handleChooseFromGallery,
+                child: const Text('Image from Gallery'),
+              ),
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        });
+  }
+
+  Container buildSplashScreen() {
+    return Container(
+      color: Colors.teal.withOpacity(
+        0.6,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          SvgPicture.asset(
+            'assets/images/upload.svg',
+            height: 260.0,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 20.0),
+            child: ElevatedButton(
+              style: ButtonStyle(
+                backgroundColor: MaterialStateProperty.all(
+                  Colors.deepOrange,
+                ),
+                shape: MaterialStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      7.0,
+                    ),
+                  ),
+                ),
+              ),
+              onPressed: () => selectImage(context),
+              child: const Text(
+                'Upload Image',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22.0,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void clearImage() {
+    setState(() {
+      file = null;
+    });
+  }
+  // Future<File?> testCompressAndGetFile(File file, String targetPath) async {
+  //   var result = await FlutterImageCompress.compressAndGetFile(
+  //     file.absolute.path, targetPath,
+  //     quality: 88,
+  //     rotate: 180,
+  //   );
+  //   print(file.lengthSync());
+  //   print(result?.lengthSync());
+  //
+  //   return result;
+  // }
+
+  Future compressImage() async {
+    final tempDir = await getTemporaryDirectory();
+    final path = tempDir.path;
+    im.Image? imageFile = im.decodeImage(file!.readAsBytesSync());
+    final compressedImageFile = File('$path/img_$postId.jpg')
+      ..writeAsBytesSync(im.encodeJpg(imageFile!, quality: 85));
+    setState(() {
+      file = compressedImageFile;
+    });
+  }
+
+  Future<String> upLoadImage(imageFile) async {
+    UploadTask? uploadTask = storageRef
+        .child(
+          'post_$postId.jpg',
+        )
+        .putFile(imageFile);
+    TaskSnapshot storageSnap = await uploadTask;
+    String downloadUrl = await storageSnap.ref.getDownloadURL();
+    return downloadUrl;
+  }
+
+  createPostInFirestore({
+    String? mediaUrl,
+    String? location,
+    String? description,
+  }) {
+    postsRef
+        .doc(widget.currentUser?.id)
+        .collection('userPosts')
+        .doc(postId)
+        .set({
+      'postId': postId,
+      'ownerId': widget.currentUser?.id,
+      'userName': widget.currentUser?.userName,
+      'mediaUrl': mediaUrl,
+      'description': description,
+      'location': location,
+      'timestamp': timestamp,
+      'likes': {},
+    });
+  }
+
+  Future<void> handleSubmit() async {
+    setState(() {
+      isUploading = true;
+    });
+    await compressImage();
+    String mediaUrl = await upLoadImage(file);
+    createPostInFirestore(
+      mediaUrl: mediaUrl,
+      location: locationController.text,
+      description: captionController.text,
+    );
+    captionController.clear();
+    locationController.clear();
+    setState(() {
+      file = null;
+      isUploading = false;
+      postId = const Uuid().v4();
+    });
+  }
+
+  Scaffold buildUploadForm() {
+    return Scaffold(
+      appBar: AppBar(
+        actions: [
+          TextButton(
+            onPressed: isUploading ? null : () => handleSubmit(),
+            child: const Text(
+              'Post',
+              style: TextStyle(
+                color: Colors.purple,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          )
+        ],
+        backgroundColor: Colors.white70,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back,
+            color: Colors.black,
+          ),
+          onPressed: clearImage,
+        ),
+        title: const Text(
+          'Caption Post',
+          style: TextStyle(
+            color: Colors.black,
+          ),
+        ),
+      ),
+      body: ListView(
+        children: [
+          isUploading ? const BrandLinearProgress() : const Text(''),
+          SizedBox(
+            height: 220.0,
+            width: MediaQuery.of(context).size.width * 0.8,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Container(
+                  decoration: BoxDecoration(
+                    image: DecorationImage(
+                      fit: BoxFit.cover,
+                      image: FileImage(
+                        File(file!.path),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(
+            height: 10.0,
+          ),
+          ListTile(
+            leading: CircleAvatar(
+              backgroundImage: CachedNetworkImageProvider(
+                widget.currentUser!.photoUrl,
+              ),
+            ),
+            title: SizedBox(
+              width: 250.0,
+              child: TextField(
+                controller: captionController,
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  hintText: 'Write a caption....',
+                ),
+              ),
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(
+              Icons.pin_drop,
+              color: Colors.orange,
+              size: 35.0,
+            ),
+            title: SizedBox(
+              width: 250.0,
+              child: TextField(
+                controller: locationController,
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  hintText: 'Where was this photo taken?',
+                ),
+              ),
+            ),
+          ),
+          Container(
+            alignment: Alignment.center,
+            height: 100,
+            width: 200.0,
+            child: ElevatedButton.icon(
+              onPressed: () {},
+              icon: const Icon(
+                Icons.my_location,
+                color: Colors.white,
+              ),
+              label: const Text(
+                'Use current location',
+                style: TextStyle(
+                  color: Colors.white,
+                ),
+              ),
+              style: ButtonStyle(
+                backgroundColor: MaterialStateProperty.all(
+                  Colors.deepPurple,
+                ),
+                shape: MaterialStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      30.0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return file == null ? buildSplashScreen() : buildUploadForm();
+  }
+}
